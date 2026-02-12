@@ -1,0 +1,33 @@
+[package]
+name = "replication-service"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+tracing = ["dep:tracing", "dep:tracing-subscriber"]
+
+default = ["tracing"]
+
+[dependencies]
+tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros", "time"] }
+tonic = "0.12"
+tracing = { version = "0.1.41", optional = true }
+tracing-subscriber = { version = "0.3.20", features = [
+  "tracing-log",
+  "fmt",
+  "json",
+  "registry",
+  "std",
+], optional = true }
+
+opentelemetry = "0.31.0"
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.31.0", features = ["trace", "grpc-tonic"] }
+prost = "0.13"
+prost-types = "0.13"
+storage-proto-lib = { path = "../protos" }
+prometheus-client = "0.24.0"
+axum = "0.8"
+rand = "0.9"
+async-trait = "0.1"
+crc32fast = "1.5.0"

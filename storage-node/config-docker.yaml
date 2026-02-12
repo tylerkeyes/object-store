@@ -1,0 +1,27 @@
+# Storage Node Configuration (Docker Deployment)
+
+# List of metadata service addresses (tried in order for failover)
+metadata-addresses:
+  - http://storage-metadata:3001
+
+# gRPC service port
+port: 3000
+
+# Prometheus metrics HTTP port
+metrics-port: 9092
+
+# Path to chunk store data file
+chunk-store-path: "chunkstore.dat"
+
+# Number of chunk slots to allocate (each slot is 8 MiB)
+# Default: 2048 (16 GiB capacity per node)
+allocated-slots: 2048
+
+# Fsync every N writes (1 = every write, 0 = never)
+fsync-every-n-writes: 1
+
+# Fsync after deletes
+fsync-on-delete: true
+
+# Skip checksum verification during startup recovery (faster, less safe)
+fast-recover: false

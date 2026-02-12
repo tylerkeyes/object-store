@@ -1,0 +1,16 @@
+target/
+*/target/
+metadata_data/
+chunk_data/
+
+bazel-bin
+bazel-object-store
+bazel-out
+bazel-testlogs
+toolchains/
+platforms/
+
+# Python virtual environment
+tests/venv/
+
+*.dat

@@ -1,0 +1,13 @@
+[package]
+name = "storage-proto-lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1"
+prost = "0.13"
+prost-types = "0.13"
+tonic = "0.12"
+
+[build-dependencies]
+tonic-build = "0.12"

@@ -1,0 +1,52 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@crates//:defs.bzl", "all_crate_deps")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
+load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+
+rust_binary(
+    name = "storage_node",
+    srcs = glob(["src/**/*.rs"]),
+    deps = [
+        "//protos:storage_proto_lib",
+    ] + all_crate_deps(normal = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    data = ["config.yaml"],
+)
+
+rust_test(
+    name = "storage_node_test",
+    crate = ":storage_node",
+    deps = all_crate_deps(normal_dev = True),
+)
+
+# Cross-compile binary for Linux amd64
+platform_transition_filegroup(
+    name = "storage_node_linux_amd64",
+    srcs = [":storage_node"],
+    target_platform = "//platforms:linux_amd64",
+)
+
+# OCI container image
+pkg_tar(
+    name = "storage_node_layer",
+    srcs = [
+        ":storage_node_linux_amd64",
+        "config.yaml",
+    ],
+    package_dir = "/app",
+)
+
+oci_image(
+    name = "storage_node_image",
+    base = "@debian_bookworm_slim_linux_amd64",
+    tars = [":storage_node_layer"],
+    entrypoint = ["/app/storage_node"],
+    exposed_ports = ["3000/tcp"],
+)
+
+oci_load(
+    name = "storage_node_load",
+    image = ":storage_node_image",
+    repo_tags = ["storage-node:latest"],
+)

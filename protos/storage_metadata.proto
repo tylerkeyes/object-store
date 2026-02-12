@@ -1,0 +1,225 @@
+syntax = "proto3";
+
+package storage_metadata;
+
+service StorageMetadataService {
+  rpc PutObject(PutObjectRequest) returns (PutObjectResponse);
+  rpc PutChunk(PutChunkRequest) returns (PutChunkResponse);
+  rpc PutStorageNode(PutStorageNodeRequest) returns (PutStorageNodeResponse);
+  rpc GetObject(GetObjectRequest) returns (GetObjectResponse);
+  rpc GetChunk(GetChunkRequest) returns (GetChunkResponse);
+  rpc GetStorageNode(GetStorageNodeRequest) returns (GetStorageNodeResponse);
+  rpc DeleteObject(DeleteObjectRequest) returns (DeleteObjectResponse);
+  rpc DeleteChunk(DeleteChunkRequest) returns (DeleteChunkResponse);
+  rpc DeleteStorageNode(DeleteStorageNodeRequest)
+      returns (DeleteStorageNodeResponse);
+  rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse);
+  rpc ListStorageNodes(ListStorageNodesRequest)
+      returns (ListStorageNodesResponse);
+
+  // Replication management RPCs
+  rpc ListUnderReplicatedChunks(ListUnderReplicatedChunksRequest)
+      returns (ListUnderReplicatedChunksResponse);
+  rpc AddChunkReplica(AddChunkReplicaRequest) returns (AddChunkReplicaResponse);
+
+  // Chunk allocation RPCs (Query -> Action -> Persist pattern)
+  rpc AllocateChunk(AllocateChunkRequest) returns (AllocateChunkResponse);
+  rpc ConfirmChunk(ConfirmChunkRequest) returns (ConfirmChunkResponse);
+
+  // Deferred checksum update (for streaming uploads)
+  rpc UpdateObjectChecksum(UpdateObjectChecksumRequest) returns (UpdateObjectChecksumResponse);
+}
+
+message PutObjectRequest {
+  uint32 checksum = 1;
+  string name = 2;
+}
+message PutObjectResponse {}
+
+message PutChunkRequest {
+  string object_name = 1;
+  uint32 checksum = 2;
+}
+message PutChunkResponse {
+  uint64 chunk_id = 1;
+  string storage_node_address = 2;
+}
+
+message PutStorageNodeRequest { string address = 1; }
+message PutStorageNodeResponse { uint64 id = 1; }
+
+message GetObjectRequest { string object_name = 1; }
+message GetObjectResponse {
+  uint32 checksum = 1;
+  repeated MetaChunk chunks = 2;
+}
+
+message GetChunkRequest { uint64 chunk_id = 1; }
+message GetChunkResponse {
+  string object_name = 1;
+  uint32 checksum = 2;
+  repeated MetaStorageNode storage_nodes = 3;
+}
+
+message GetStorageNodeRequest { uint64 id = 1; }
+message GetStorageNodeResponse { string address = 1; }
+
+message DeleteObjectRequest { string object_name = 1; }
+message DeleteObjectResponse {}
+
+message DeleteChunkRequest { uint64 chunk_id = 1; }
+message DeleteChunkResponse {}
+
+message DeleteStorageNodeRequest { uint64 id = 1; }
+message DeleteStorageNodeResponse {}
+
+message ListObjectsRequest {}
+message ListObjectsResponse { repeated MetaObject objects = 1; }
+
+message ListStorageNodesRequest {};
+message ListStorageNodesResponse { repeated MetaStorageNode storage_nodes = 1; }
+
+// Object messages
+
+message MetaStorageNode {
+  uint64 id = 1;
+  string address = 2;
+}
+
+message MetaChunk {
+  uint64 id = 1;
+  uint32 checksum = 2;
+  repeated MetaStorageNode storage_nodes = 3;
+}
+
+message MetaObject {
+  string name = 1;
+  uint32 checksum = 2;
+  repeated MetaChunk chunks = 3;
+  uint64 total_size = 4;
+}
+
+// Replication management messages
+message ListUnderReplicatedChunksRequest {
+  uint32 max_replicas = 1;  // Return chunks with fewer than this many replicas
+}
+
+message ListUnderReplicatedChunksResponse {
+  repeated UnderReplicatedChunk chunks = 1;
+}
+
+message UnderReplicatedChunk {
+  uint64 chunk_id = 1;
+  uint32 checksum = 2;
+  repeated uint64 current_storage_node_ids = 3;
+}
+
+message AddChunkReplicaRequest {
+  uint64 chunk_id = 1;
+  uint64 storage_node_id = 2;
+}
+
+message AddChunkReplicaResponse {}
+
+// Chunk allocation messages (Query -> Action -> Persist pattern)
+message AllocateChunkRequest {
+  string object_name = 1;
+  uint32 checksum = 2;
+}
+
+message AllocateChunkResponse {
+  uint64 chunk_id = 1;
+  string storage_node_address = 2;
+  uint64 storage_node_id = 3;
+}
+
+message ConfirmChunkRequest {
+  uint64 chunk_id = 1;
+  string object_name = 2;
+  uint32 checksum = 3;
+  uint64 storage_node_id = 4;
+}
+
+message ConfirmChunkResponse {}
+
+// Deferred checksum update messages (for streaming uploads)
+message UpdateObjectChecksumRequest {
+  string object_name = 1;
+  uint32 checksum = 2;
+  uint64 total_size = 3;
+}
+message UpdateObjectChecksumResponse {}
+
+// ===== Internal Cluster Service =====
+// Used for inter-node communication in a distributed metadata cluster.
+
+service MetadataClusterService {
+  // Forward* RPCs: forward a client request to the owning node
+  rpc ForwardPutObject(PutObjectRequest) returns (PutObjectResponse);
+  rpc ForwardGetObject(GetObjectRequest) returns (GetObjectResponse);
+  rpc ForwardDeleteObject(DeleteObjectRequest) returns (DeleteObjectResponse);
+  rpc ForwardPutChunk(PutChunkRequest) returns (PutChunkResponse);
+  rpc ForwardAllocateChunk(AllocateChunkRequest) returns (AllocateChunkResponse);
+  rpc ForwardConfirmChunk(ConfirmChunkRequest) returns (ConfirmChunkResponse);
+  rpc ForwardGetChunk(GetChunkRequest) returns (GetChunkResponse);
+  rpc ForwardDeleteChunk(DeleteChunkRequest) returns (DeleteChunkResponse);
+  rpc ForwardAddChunkReplica(AddChunkReplicaRequest) returns (AddChunkReplicaResponse);
+
+  // Broadcast* RPCs: apply a global write to this node (do NOT re-broadcast)
+  rpc BroadcastPutStorageNode(PutStorageNodeRequest) returns (PutStorageNodeResponse);
+  rpc BroadcastDeleteStorageNode(DeleteStorageNodeRequest) returns (DeleteStorageNodeResponse);
+
+  // ListLocal* RPCs: return only locally-owned data (for scatter-gather)
+  rpc ListLocalObjects(ListObjectsRequest) returns (ListObjectsResponse);
+  rpc ListLocalUnderReplicatedChunks(ListUnderReplicatedChunksRequest) returns (ListUnderReplicatedChunksResponse);
+
+  // Migration: stream objects/chunks within a hash range
+  rpc TransferPartition(TransferPartitionRequest) returns (stream TransferPartitionEntry);
+
+  // Chunk index synchronization
+  rpc BroadcastChunkIndex(ChunkIndexUpdate) returns (ChunkIndexUpdateResponse);
+}
+
+// Migration messages
+message TransferPartitionRequest {
+  // Hash ranges to transfer (list of [start, end) pairs)
+  repeated HashRange ranges = 1;
+}
+
+message HashRange {
+  uint64 start = 1;
+  uint64 end = 2;
+}
+
+message TransferPartitionEntry {
+  // Each entry is either an object or a chunk
+  oneof entry {
+    TransferObject object = 1;
+    TransferChunk chunk = 2;
+  }
+}
+
+message TransferObject {
+  string name = 1;
+  uint32 checksum = 2;
+  repeated uint64 chunk_ids = 3;
+}
+
+message TransferChunk {
+  uint64 id = 1;
+  string object_name = 2;
+  uint32 checksum = 3;
+  repeated uint64 storage_node_ids = 4;
+}
+
+// Chunk index synchronization messages
+message ChunkIndexUpdate {
+  repeated ChunkIndexEntry entries = 1;
+}
+
+message ChunkIndexEntry {
+  uint64 chunk_id = 1;
+  string object_name = 2;
+}
+
+message ChunkIndexUpdateResponse {}

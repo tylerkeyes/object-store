@@ -1,0 +1,45 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust_prost//:defs.bzl", "rust_prost_library")
+load("@crates//:defs.bzl", "all_crate_deps")
+
+package(default_visibility = ["//visibility:public"])
+
+# Proto libraries
+proto_library(
+    name = "storage_metadata_proto",
+    srcs = ["storage_metadata.proto"],
+)
+
+proto_library(
+    name = "storage_node_proto",
+    srcs = ["storage_node.proto"],
+)
+
+# Generate Rust code from protos
+rust_prost_library(
+    name = "storage_metadata_prost",
+    proto = ":storage_metadata_proto",
+)
+
+rust_prost_library(
+    name = "storage_node_prost",
+    proto = ":storage_node_proto",
+)
+
+# Wrapper library that re-exports under expected module names
+# This maintains compatibility with: use storage_proto_lib::storage_metadata::*
+rust_library(
+    name = "storage_proto_lib",
+    srcs = [
+        "src/lib.rs",
+        "src/clients.rs",
+    ],
+    crate_name = "storage_proto_lib",
+    deps = [
+        ":storage_metadata_prost",
+        ":storage_node_prost",
+    ] + all_crate_deps(normal = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    rustc_flags = ["--cfg=bazel"],
+)

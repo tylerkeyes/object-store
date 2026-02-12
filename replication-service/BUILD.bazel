@@ -1,0 +1,48 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@crates//:defs.bzl", "all_crate_deps")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
+load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+
+rust_binary(
+    name = "replication_service",
+    srcs = glob(["src/**/*.rs"]),
+    deps = [
+        "//protos:storage_proto_lib",
+    ] + all_crate_deps(normal = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+)
+
+rust_test(
+    name = "replication_service_test",
+    crate = ":replication_service",
+    deps = all_crate_deps(normal_dev = True),
+)
+
+# Cross-compile binary for Linux amd64
+platform_transition_filegroup(
+    name = "replication_service_linux_amd64",
+    srcs = [":replication_service"],
+    target_platform = "//platforms:linux_amd64",
+)
+
+# OCI container image
+pkg_tar(
+    name = "replication_service_layer",
+    srcs = [":replication_service_linux_amd64"],
+    package_dir = "/app",
+)
+
+oci_image(
+    name = "replication_service_image",
+    base = "@debian_bookworm_slim_linux_amd64",
+    tars = [":replication_service_layer"],
+    entrypoint = ["/app/replication_service"],
+    exposed_ports = ["9093/tcp"],
+)
+
+oci_load(
+    name = "replication_service_load",
+    image = ":replication_service_image",
+    repo_tags = ["replication-service:latest"],
+)

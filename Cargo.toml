@@ -1,0 +1,9 @@
+[workspace]
+members = [
+  "api-gateway",
+  "storage-metadata",
+  "storage-node",
+  "replication-service",
+  "protos",
+]
+resolver = "3"

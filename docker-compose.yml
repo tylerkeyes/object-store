@@ -1,0 +1,206 @@
+services:
+  storage-metadata-1:
+    build:
+      context: .
+      dockerfile: storage-metadata/Dockerfile
+    ports:
+      - "3001:3001"
+      - "3011:3011"
+      - "9091:9091"
+    environment:
+      - NODE_ID=meta-1
+      - GRPC_PORT=3001
+      - GOSSIP_PORT=3011
+      - SEED_NODES=storage-metadata-2:3012,storage-metadata-3:3013
+      - DATA_DIR=/data
+      - METRICS_PORT=9091
+      - OTLP_ENDPOINT=http://tempo:4317
+      - RUST_LOG=info
+    volumes:
+      - metadata-1-data:/data
+    depends_on:
+      - tempo
+    networks:
+      - object-store-net
+
+  storage-metadata-2:
+    build:
+      context: .
+      dockerfile: storage-metadata/Dockerfile
+    ports:
+      - "3002:3002"
+      - "3012:3012"
+      - "9191:9191"
+    environment:
+      - NODE_ID=meta-2
+      - GRPC_PORT=3002
+      - GOSSIP_PORT=3012
+      - SEED_NODES=storage-metadata-1:3011,storage-metadata-3:3013
+      - DATA_DIR=/data
+      - METRICS_PORT=9191
+      - OTLP_ENDPOINT=http://tempo:4317
+      - RUST_LOG=info
+    volumes:
+      - metadata-2-data:/data
+    depends_on:
+      - tempo
+    networks:
+      - object-store-net
+
+  storage-metadata-3:
+    build:
+      context: .
+      dockerfile: storage-metadata/Dockerfile
+    ports:
+      - "3003:3003"
+      - "3013:3013"
+      - "9291:9291"
+    environment:
+      - NODE_ID=meta-3
+      - GRPC_PORT=3003
+      - GOSSIP_PORT=3013
+      - SEED_NODES=storage-metadata-1:3011,storage-metadata-2:3012
+      - DATA_DIR=/data
+      - METRICS_PORT=9291
+      - OTLP_ENDPOINT=http://tempo:4317
+      - RUST_LOG=info
+    volumes:
+      - metadata-3-data:/data
+    depends_on:
+      - tempo
+    networks:
+      - object-store-net
+
+  storage-node:
+    build:
+      context: .
+      dockerfile: storage-node/Dockerfile
+    ports:
+      - "3000:3000"
+      - "9092:9092"
+    environment:
+      - CONFIG_PATH=/etc/storage-node/config.yaml
+      - OTLP_ENDPOINT=http://tempo:4317
+      - RUST_LOG=info
+    volumes:
+      - ./storage-node/config-docker.yaml:/etc/storage-node/config.yaml:ro
+    depends_on:
+      - tempo
+    networks:
+      - object-store-net
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - METADATA_URLS=http://storage-metadata-1:3001,http://storage-metadata-2:3002,http://storage-metadata-3:3003
+      - STORAGE_NODE_URL=http://storage-node:3000
+      - OTLP_ENDPOINT=http://tempo:4317
+      - RUST_LOG=info
+    depends_on:
+      - storage-metadata-1
+      - storage-metadata-2
+      - storage-metadata-3
+      - storage-node
+      - tempo
+    networks:
+      - object-store-net
+
+  replication-service:
+    build:
+      context: .
+      dockerfile: replication-service/Dockerfile
+    ports:
+      - "9093:9093"
+    environment:
+      - METADATA_URLS=http://storage-metadata-1:3001,http://storage-metadata-2:3002,http://storage-metadata-3:3003
+      - REPLICATION_INTERVAL_SECS=60
+      - REPLICATION_MAX_CHUNKS_PER_CYCLE=100
+      - OTLP_ENDPOINT=http://tempo:4317
+      - RUST_LOG=info
+    depends_on:
+      - storage-metadata-1
+      - storage-metadata-2
+      - storage-metadata-3
+      - storage-node
+      - tempo
+    networks:
+      - object-store-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - api-gateway
+      - storage-metadata-1
+      - storage-metadata-2
+      - storage-metadata-3
+      - storage-node
+    networks:
+      - object-store-net
+
+  loki:
+    image: grafana/loki:2.9.0
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - object-store-net
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - object-store-net
+
+  tempo:
+    image: grafana/tempo:2.3.0
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "3200:3200"
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./tempo-config.yaml:/etc/tempo/tempo.yaml:ro
+    networks:
+      - object-store-net
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    ports:
+      - "3030:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks:
+      - object-store-net
+
+volumes:
+  metadata-1-data:
+  metadata-2-data:
+  metadata-3-data:
+
+networks:
+  object-store-net:
+    driver: bridge

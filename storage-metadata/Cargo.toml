@@ -1,0 +1,52 @@
+[package]
+name = "storage-metadata"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+grpc-web = [
+  "dep:tracing-subscriber",
+  "dep:tower",
+  "dep:tower-http",
+  "tower-http?/cors",
+]
+tracing = ["dep:tracing", "dep:tracing-subscriber"]
+
+default = ["grpc-web", "tracing"]
+
+[dependencies]
+crc32fast = "1.5.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1.43.0", features = ["rt-multi-thread", "macros", "sync"] }
+tokio-stream = "0.1"
+rand = "0.8.5"
+chitchat = "0.10"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+hostname = "0.4"
+
+tonic = "0.12"
+tonic-web = "0.12"
+prost = "0.13"
+prost-types = "0.13"
+
+tower = { version = "0.4.13", optional = true }
+tower-http = { version = "0.5.2", features = ["cors"], optional = true }
+http = "1.1.0"
+
+tracing = { version = "0.1.41", optional = true }
+tracing-subscriber = { version = "0.3.18", features = [
+  "env-filter",
+  "fmt",
+  "json",
+], optional = true }
+opentelemetry = "0.31.0"
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.31.0", features = ["trace", "grpc-tonic"] }
+tracing-opentelemetry = "0.32.0"
+storage-proto-lib = { path = "../protos" }
+prometheus-client = "0.24.0"
+axum = "0.8"
+
+[dev-dependencies]
+tempfile = "3.23.0"
